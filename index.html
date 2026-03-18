@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>Blood Sugar Tracker</title>
+
+<!-- PWA / iPhone home screen -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Blood Sugar">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1a1a1a">
+
+<!-- PWA manifest inline -->
+<script>
+  const manifest = {
+    name: "Blood Sugar Tracker",
+    short_name: "Blood Sugar",
+    start_url: ".",
+    display: "standalone",
+    background_color: "#f5f3ef",
+    theme_color: "#1a1a1a",
+    icons: [{
+      src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231a1a1a'/><text y='68' x='50' text-anchor='middle' font-size='55' fill='white'>🩸</text></svg>",
+      sizes: "192x192",
+      type: "image/svg+xml"
+    }]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = URL.createObjectURL(blob);
+  document.currentScript.after(link);
+</script>
+
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f3ef;
+    --card: #ffffff;
+    --ink: #1a1a1a;
+    --sub: #6b6b6b;
+    --low: #3b82f6;
+    --normal: #22c55e;
+    --high: #f59e0b;
+    --vhigh: #ef4444;
+    --border: #e5e2db;
+    --accent: #1a1a1a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    padding-bottom: calc(40px + env(safe-area-inset-bottom));
+    overscroll-behavior: none;
+  }
+
+  header {
+    background: var(--ink);
+    color: white;
+    padding: calc(env(safe-area-inset-top) + 16px) 20px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  header p {
+    font-size: 12px;
+    opacity: 0.55;
+    margin-top: 2px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .container { padding: 0 16px; }
+
+  /* Add Entry Card */
+  .add-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 20px;
+    margin: 16px 0;
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+
+  .add-card h2 {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--sub);
+    margin-bottom: 14px;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group.full { grid-column: 1 / -1; }
+
+  label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--sub);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  input, select, textarea {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px; /* prevents iOS auto-zoom on focus */
+    padding: 10px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--ink);
+  }
+
+  textarea { resize: none; height: 64px; font-size: 14px; }
+
+  .reading-input {
+    font-family: 'DM Mono', monospace;
+    font-size: 22px;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  .btn-add {
+    width: 100%;
+    padding: 13px;
+    background: var(--ink);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: opacity 0.15s;
+  }
+
+  .btn-add:active { opacity: 0.75; }
+
+  /* Summary strip */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .stat-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 10px;
+    text-align: center;
+  }
+
+  .stat-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .stat-lbl {
+    font-size: 10px;
+    color: var(--sub);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+  }
+
+  /* Day sections */
+  .day-section { margin-bottom: 20px; }
+
+  .day-header {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--sub);
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  /* Entry row */
+  .entry {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 13px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .entry::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    border-radius: 12px 0 0 12px;
+  }
+
+  .entry.low::before { background: var(--low); }
+  .entry.normal::before { background: var(--normal); }
+  .entry.high::before { background: var(--high); }
+  .entry.vhigh::before { background: var(--vhigh); }
+
+  .entry-time {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--sub);
+    min-width: 54px;
+  }
+
+  .entry-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 22px;
+    font-weight: 500;
+    min-width: 52px;
+  }
+
+  .entry.low .entry-val { color: var(--low); }
+  .entry.normal .entry-val { color: var(--normal); }
+  .entry.high .entry-val { color: var(--high); }
+  .entry.vhigh .entry-val { color: var(--vhigh); }
+
+  .entry-info { flex: 1; min-width: 0; }
+
+  .entry-meal {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .entry-notes {
+    font-size: 11px;
+    color: var(--sub);
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .entry-badge {
+    font-size: 10px;
+    padding: 3px 7px;
+    border-radius: 20px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .entry.low .entry-badge { background: #eff6ff; color: var(--low); }
+  .entry.normal .entry-badge { background: #f0fdf4; color: #16a34a; }
+  .entry.high .entry-badge { background: #fffbeb; color: #d97706; }
+  .entry.vhigh .entry-badge { background: #fef2f2; color: #dc2626; }
+
+  .btn-delete {
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+    min-width: 36px;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-delete:active { color: #ef4444; }
+
+  /* Range legend */
+  .legend {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+  }
+
+  .legend h3 {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--sub);
+    margin-bottom: 4px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+  }
+
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Export */
+  .btn-export {
+    width: 100%;
+    padding: 13px;
+    background: white;
+    color: var(--ink);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 0.15s;
+  }
+  .btn-export:active { background: var(--bg); }
+
+  .empty {
+    text-align: center;
+    color: var(--sub);
+    font-size: 14px;
+    padding: 32px 0;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--ink);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: transform 0.3s;
+    z-index: 100;
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Blood Sugar Tracker</h1>
+  <p id="header-date">Loading...</p>
+</header>
+
+<div class="container">
+
+  <!-- Add Entry -->
+  <div class="add-card">
+    <h2>+ New Reading</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Reading (mmol/L)</label>
+        <input type="number" id="inp-reading" class="reading-input" placeholder="0.0" step="0.1" min="1" max="30">
+      </div>
+      <div class="form-group">
+        <label>Time</label>
+        <input type="time" id="inp-time">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="inp-date">
+      </div>
+
+    </div>
+    <div class="form-row">
+      <div class="form-group full">
+        <label>Notes (optional)</label>
+        <textarea id="inp-notes" placeholder="e.g. 2hrs after eating, fasting..."></textarea>
+      </div>
+    </div>
+    <button class="btn-add" onclick="addEntry()">Add Reading</button>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary" id="summary" style="display:none">
+    <div class="stat-box">
+      <div class="stat-val" id="stat-avg">—</div>
+      <div class="stat-lbl">Average</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-val" id="stat-high" style="color:var(--vhigh)">—</div>
+      <div class="stat-lbl">Highest</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-val" id="stat-low" style="color:var(--low)">—</div>
+      <div class="stat-lbl">Lowest</div>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <h3>Reference Ranges (mmol/L)</h3>
+    <div class="legend-item"><span class="dot" style="background:var(--low)"></span> Low: below 4.0</div>
+    <div class="legend-item"><span class="dot" style="background:var(--normal)"></span> Normal: 4.0 – 7.8</div>
+    <div class="legend-item"><span class="dot" style="background:var(--high)"></span> High: 7.9 – 11.0</div>
+    <div class="legend-item"><span class="dot" style="background:var(--vhigh)"></span> Very High: above 11.0</div>
+  </div>
+
+  <!-- Log -->
+  <div id="log-container">
+    <div class="empty">No readings yet. Add your first one above.</div>
+  </div>
+
+  <button class="btn-export" onclick="exportCSV()">⬇ Export as CSV for Doctor</button>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // Pre-load Tuesday's data
+  const SEED = [
+    // Tue 18 Mar
+    { id:  1, date: '2026-03-18', time: '07:45', reading: 10.9, meal: 'Bacon egg muffin',   notes: 'Fasting' },
+    { id:  2, date: '2026-03-18', time: '10:30', reading:  8.9, meal: 'Nut bar',             notes: '1.5hrs after' },
+    { id:  3, date: '2026-03-18', time: '12:00', reading:  8.8, meal: 'Chicken noodles',     notes: '2.5hrs after' },
+    { id:  4, date: '2026-03-18', time: '14:30', reading: 12.8, meal: '',                    notes: 'Post lunch spike' },
+    { id:  5, date: '2026-03-18', time: '18:00', reading:  8.6, meal: '',                    notes: 'Evening' },
+    // Mon 17 Mar
+    { id:  6, date: '2026-03-17', time: '07:30', reading: 11.2, meal: 'Toast & vegemite',    notes: 'Fasting' },
+    { id:  7, date: '2026-03-17', time: '10:00', reading:  9.1, meal: 'Apple',               notes: '2hrs after breakfast' },
+    { id:  8, date: '2026-03-17', time: '12:30', reading:  9.8, meal: 'Ham sandwich',        notes: '1hr after lunch' },
+    { id:  9, date: '2026-03-17', time: '15:00', reading:  7.4, meal: 'Coffee (no sugar)',   notes: 'Afternoon' },
+    { id: 10, date: '2026-03-17', time: '18:30', reading:  8.2, meal: 'Pasta bolognese',     notes: '2hrs after dinner' },
+    // Sun 16 Mar
+    { id: 11, date: '2026-03-16', time: '08:15', reading: 10.1, meal: 'Porridge & banana',   notes: 'Fasting' },
+    { id: 12, date: '2026-03-16', time: '11:00', reading:  7.9, meal: 'Yogurt',              notes: '2hrs after breakfast' },
+    { id: 13, date: '2026-03-16', time: '13:00', reading:  9.3, meal: 'Roast chicken & veg', notes: '1hr after lunch' },
+    { id: 14, date: '2026-03-16', time: '16:30', reading:  6.8, meal: 'Handful of nuts',     notes: 'Snack' },
+    { id: 15, date: '2026-03-16', time: '19:00', reading: 11.5, meal: 'Pizza',               notes: 'Post dinner spike' },
+    // Sat 15 Mar
+    { id: 16, date: '2026-03-15', time: '09:00', reading:  9.7, meal: 'Eggs on toast',       notes: 'Fasting (sleep in)' },
+    { id: 17, date: '2026-03-15', time: '12:30', reading:  8.4, meal: 'Caesar salad',        notes: '1.5hrs after brunch' },
+    { id: 18, date: '2026-03-15', time: '15:30', reading:  7.2, meal: 'Fruit salad',         notes: 'Afternoon snack' },
+    { id: 19, date: '2026-03-15', time: '19:30', reading: 10.3, meal: 'BBQ sausages & bread', notes: '2hrs after dinner' },
+    // Fri 14 Mar
+    { id: 20, date: '2026-03-14', time: '07:30', reading: 11.8, meal: 'Cornflakes & milk',   notes: 'Fasting' },
+    { id: 21, date: '2026-03-14', time: '10:15', reading:  9.5, meal: 'Muesli bar',          notes: '1.5hrs after breakfast' },
+    { id: 22, date: '2026-03-14', time: '13:00', reading: 10.2, meal: 'Fish & chips',        notes: '1hr after lunch' },
+    { id: 23, date: '2026-03-14', time: '16:00', reading:  7.6, meal: 'Water & walk',        notes: 'Post exercise' },
+    { id: 24, date: '2026-03-14', time: '19:00', reading:  8.9, meal: 'Grilled salmon & rice', notes: '2hrs after dinner' },
+    // Thu 13 Mar
+    { id: 25, date: '2026-03-13', time: '07:45', reading: 10.4, meal: 'Weet-bix & milk',     notes: 'Fasting' },
+    { id: 26, date: '2026-03-13', time: '11:00', reading:  8.7, meal: 'Banana',              notes: '2hrs after breakfast' },
+    { id: 27, date: '2026-03-13', time: '13:30', reading:  9.1, meal: 'Chicken wrap',        notes: '1hr after lunch' },
+    { id: 28, date: '2026-03-13', time: '17:30', reading:  6.9, meal: '',                    notes: 'Pre dinner' },
+    { id: 29, date: '2026-03-13', time: '20:00', reading:  9.4, meal: 'Stir fry & noodles',  notes: '2hrs after dinner' },
+    // Wed 12 Mar
+    { id: 30, date: '2026-03-12', time: '08:00', reading: 12.1, meal: 'White bread toast',   notes: 'Fasting — high' },
+    { id: 31, date: '2026-03-12', time: '10:30', reading:  9.9, meal: 'Cheese & crackers',   notes: '2hrs after breakfast' },
+    { id: 32, date: '2026-03-12', time: '13:00', reading: 13.2, meal: 'Meat pie',            notes: 'Post lunch spike' },
+    { id: 33, date: '2026-03-12', time: '15:30', reading:  8.3, meal: 'Water',               notes: 'Came down after walk' },
+    { id: 34, date: '2026-03-12', time: '19:00', reading:  9.0, meal: 'Beef stew & potato',  notes: '2hrs after dinner' },
+  ];
+
+  let entries = JSON.parse(localStorage.getItem('bst_entries') || 'null');
+  // Always reload seed if it looks like old data (id 1 on 2025 date)
+  if (!entries || (entries[0] && entries[0].date && entries[0].date.startsWith('2025'))) {
+    entries = SEED; save();
+  }
+
+  let nextId = entries.length ? Math.max(...entries.map(e => e.id)) + 1 : 1;
+
+  function save() { localStorage.setItem('bst_entries', JSON.stringify(entries)); }
+
+  function classify(v) {
+    if (v < 4.0) return { cls: 'low', label: 'Low' };
+    if (v <= 7.8) return { cls: 'normal', label: 'Normal' };
+    if (v <= 11.0) return { cls: 'high', label: 'High' };
+    return { cls: 'vhigh', label: 'Very High' };
+  }
+
+  function fmt12(t) {
+    if (!t) return '';
+    const [h, m] = t.split(':').map(Number);
+    const ampm = h >= 12 ? 'pm' : 'am';
+    const h12 = h % 12 || 12;
+    return `${h12}:${String(m).padStart(2,'0')}${ampm}`;
+  }
+
+  function fmtDate(d) {
+    const [y, mo, day] = d.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dt = new Date(y, mo-1, day);
+    return `${days[dt.getDay()]} ${day} ${months[mo-1]} ${y}`;
+  }
+
+  function isToday(d) {
+    const t = new Date();
+    return d === `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  }
+
+  function render() {
+    // Header date
+    const now = new Date();
+    document.getElementById('header-date').textContent =
+      now.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+    // Summary
+    const sumEl = document.getElementById('summary');
+    if (entries.length) {
+      sumEl.style.display = 'grid';
+      const vals = entries.map(e => e.reading);
+      document.getElementById('stat-avg').textContent = (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);
+      document.getElementById('stat-high').textContent = Math.max(...vals).toFixed(1);
+      document.getElementById('stat-low').textContent  = Math.min(...vals).toFixed(1);
+    } else { sumEl.style.display = 'none'; }
+
+    // Group by date desc
+    const grouped = {};
+    entries.forEach(e => { if (!grouped[e.date]) grouped[e.date] = []; grouped[e.date].push(e); });
+    const dates = Object.keys(grouped).sort((a,b) => b.localeCompare(a));
+
+    const container = document.getElementById('log-container');
+    if (!entries.length) { container.innerHTML = '<div class="empty">No readings yet. Add your first one above.</div>'; return; }
+
+    container.innerHTML = dates.map(date => {
+      const dayEntries = grouped[date].sort((a,b) => a.time.localeCompare(b.time));
+      const label = isToday(date) ? 'Today — ' + fmtDate(date) : fmtDate(date);
+      const rows = dayEntries.map(e => {
+        const { cls, label: lbl } = classify(e.reading);
+        return `<div class="entry ${cls}">
+          <div class="entry-time">${fmt12(e.time)}</div>
+          <div class="entry-val">${e.reading.toFixed(1)}</div>
+          <div class="entry-info">
+            ${e.notes ? `<div class="entry-notes">${e.notes}</div>` : ''}
+          </div>
+          <span class="entry-badge">${lbl}</span>
+          <button class="btn-delete" onclick="deleteEntry(${e.id})">×</button>
+        </div>`;
+      }).join('');
+      return `<div class="day-section"><div class="day-header">${label}</div>${rows}</div>`;
+    }).join('');
+  }
+
+  function addEntry() {
+    const reading = parseFloat(document.getElementById('inp-reading').value);
+    const time    = document.getElementById('inp-time').value;
+    const date    = document.getElementById('inp-date').value;
+    const meal    = '';
+    const notes   = document.getElementById('inp-notes').value.trim();
+
+    if (isNaN(reading) || reading < 1 || reading > 30) { showToast('Enter a valid reading (1–30 mmol/L)'); return; }
+    if (!time) { showToast('Please enter a time'); return; }
+    if (!date) { showToast('Please enter a date'); return; }
+
+    entries.push({ id: nextId++, date, time, reading, meal, notes });
+    save(); render();
+
+    document.getElementById('inp-reading').value = '';
+    document.getElementById('inp-notes').value = '';
+    showToast('Reading added ✓');
+  }
+
+  function deleteEntry(id) {
+    entries = entries.filter(e => e.id !== id);
+    save(); render();
+    showToast('Reading removed');
+  }
+
+  function exportCSV() {
+    const header = 'Date,Time,Reading (mmol/L),Category,Notes\n';
+    const rows = [...entries]
+      .sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
+      .map(e => {
+        const { label } = classify(e.reading);
+        return [e.date, fmt12(e.time), e.reading.toFixed(1), label, `"${e.notes}"`].join(',');
+      }).join('\n');
+    const csv = header + rows;
+    const uri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    const a = document.createElement('a');
+    a.href = uri;
+    a.download = 'blood_sugar_log.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('CSV exported ✓');
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  // Set default date/time to now
+  function setDefaults() {
+    const now = new Date();
+    document.getElementById('inp-date').value =
+      `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    document.getElementById('inp-time').value =
+      `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  }
+
+  setDefaults();
+  render();
+</script>
+</body>
+</html>
